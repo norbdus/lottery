@@ -33,6 +33,20 @@ group :development, :test do
   gem 'byebug', platforms: [:mri, :mingw, :x64_mingw]
 end
 
+group :test do
+  gem 'vcr'
+  gem 'rspec-json_expectations'
+  gem "webmock"
+  gem 'timecop'
+  gem 'email_spec'
+  gem 'rspec-activemodel-mocks'
+  gem 'shoulda-matchers'
+  gem 'shoulda-callback-matchers'
+  gem "nyan-cat-formatter"
+  gem 'dox', require: false
+end
+
+
 group :development do
   gem 'listen', '>= 3.0.5', '< 3.2'
   # Spring speeds up development by keeping your application running in the background. Read more: https://github.com/rails/spring
