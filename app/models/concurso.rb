@@ -144,6 +144,30 @@ class Concurso < ApplicationRecord
     {qty_hot: qty_hot, qty_cold: qty_cold, qty_rep_last: qty_rep_last, qty_odd: qty_odd, qty_even: qty_even, sum_game: sum_game}
   end
 
+  def self.composition_game_colorize(game)
+    require 'colorize'
+    colors = { qty_hot: :red, qty_cold: :blue }
+    # require 'colorize_string'
+    result = composition_game(game)
+    result.each do |x,y|
+      y.each do |c|
+        puts c.to_s.colorize(:color => :white, :background => colors[x])
+      end
+    end
+
+    # puts "This is blue".colorize(:blue)
+    # puts "This is light blue".colorize(:light_blue)
+    # puts "This is also blue".colorize(:color => :blue)
+    puts "This is light blue with red background".colorize(:red).on_white
+    # puts "This is light blue with red background".colorize(:light_blue ).colorize( :background => :red)
+    # puts "This is blue text on red".blue.on_red
+    # puts "This is red on blue".colorize(:red).on_blue
+    # puts "This is red on blue and underline".colorize(:red).on_blue.underline
+    # puts "This is blue text on red".blue.on_red.blink
+    # puts "This is uncolorized".blue.on_red.uncolorize
+
+  end
+
   def self.randon_game(qty = 15)
     chosen = []
     (1..qty).each do
