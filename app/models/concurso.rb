@@ -1,11 +1,27 @@
 class Concurso < ApplicationRecord
   require 'csv'    
 
+  validates :concurso, uniqueness: true
+  validates :concurso, :data_sorteio, :bola1, :bola2, :bola3, :bola4, :bola5, :bola6, :bola7, :bola8, :bola9, :bola10, :bola11, :bola12, :bola13, :bola14, :bola15, presence: true
+
   def self.load_lottery
     csv_text = File.read('lotofacil_todos.csv')
     csv = CSV.parse(csv_text, :headers => true)
     csv.each do |row|
       Concurso.create!(row.to_hash)
+    end
+  end
+
+  def self.update_games(update_count = 5)
+
+    require 'nokogiri'
+    last_game = Concurso.all.maximum(:concurso)
+    document = Nokogiri::HTML(File.open('d_lotfac.htm'))
+    table = document.at('table')
+    result = table.search('td[rowspan]').collect{|x| x.children.text}
+    arr = result.to_a.last(update_count * 31)
+    arr.each_slice(31) do |c|
+      Concurso.create!(Concurso.merge_attributes(c)) if Concurso.find_by(concurso: c[0].to_i).nil?
     end
   end
 
@@ -144,28 +160,63 @@ class Concurso < ApplicationRecord
     {qty_hot: qty_hot, qty_cold: qty_cold, qty_rep_last: qty_rep_last, qty_odd: qty_odd, qty_even: qty_even, sum_game: sum_game}
   end
 
-  def self.composition_game_colorize(game)
-    require 'colorize'
-    colors = { qty_hot: :red, qty_cold: :blue }
-    # require 'colorize_string'
-    result = composition_game(game)
-    result.each do |x,y|
-      y.each do |c|
-        puts c.to_s.colorize(:color => :white, :background => colors[x])
-      end
+  def composition_game
+    qty_hot = [] 
+    qty_cold = []
+    qty_rep_last = []
+    qty_odd = []
+    qty_even = []
+    sum_game = []
+    self.balls.each do |n|
+      qty_hot << n if Concurso.hotballs.include?(n)
+      qty_cold << n if Concurso.coldballs.include?(n)
+      qty_rep_last << n if (Concurso.find_by(concurso: self.concurso - 1).balls & self.balls).include?(n)
     end
 
-    # puts "This is blue".colorize(:blue)
-    # puts "This is light blue".colorize(:light_blue)
-    # puts "This is also blue".colorize(:color => :blue)
-    puts "This is light blue with red background".colorize(:red).on_white
-    # puts "This is light blue with red background".colorize(:light_blue ).colorize( :background => :red)
-    # puts "This is blue text on red".blue.on_red
-    # puts "This is red on blue".colorize(:red).on_blue
-    # puts "This is red on blue and underline".colorize(:red).on_blue.underline
-    # puts "This is blue text on red".blue.on_red.blink
-    # puts "This is uncolorized".blue.on_red.uncolorize
+    self.balls.each do |n|
+      qty_odd << n if n.odd?
+      qty_even << n if n.even?
+    end
 
+    sum_game << self.balls.sum
+    {qty_hot: qty_hot, qty_cold: qty_cold, qty_rep_last: qty_rep_last, qty_odd: qty_odd, qty_even: qty_even, sum_game: sum_game}
+  end
+
+  def self.composition_game_colorize(game)
+    old_logger = ActiveRecord::Base.logger
+    ActiveRecord::Base.logger = nil
+    require 'colorize'
+    colors = { qty_hot: :red, qty_cold: :blue }
+    result = game.is_a?(Array) ? composition_game(game) : game.composition_game
+    game = game.balls unless game.is_a?(Array)
+    output = { red: [], blue: [], green: [], black: []}
+    game.each do |number|
+      if result[:qty_hot].include?(number)
+        output[:red] << number
+      end
+      if result[:qty_cold].include?(number)
+        output[:blue] << number
+      end
+      if result[:qty_rep_last].include?(number)
+        output[:green] << number
+      end
+      if  !(result[:qty_hot].include?(number)) and 
+          !(result[:qty_cold].include?(number)) and 
+          !(result[:qty_rep_last].include?(number))
+          output[:black] << number
+      end
+
+    end
+    
+    output[:green] = output[:green] - output[:red] 
+    output[:green] = output[:green] - output[:blue]
+    print " #{output[:red].join(' ')} ".colorize(:color => :white, :background => :red)
+    print " #{output[:green].join(' ')} ".colorize(:color => :white, :background => :green)
+    print " #{output[:black].join(' ')} ".colorize(:color => :white, :background => :black)
+    print " #{output[:blue].join(' ')} ".colorize(:color => :white, :background => :blue)
+    print "(#{result[:qty_even].try(:size)} Pares, #{result[:qty_odd].try(:size)} Impares) - Somatório: #{result[:sum_game]}"
+    puts ''
+    nil
   end
 
   def self.randon_game(qty = 15)
@@ -174,6 +225,30 @@ class Concurso < ApplicationRecord
       chosen << ((1..25).to_a - chosen).sample
     end
     chosen
+  end
+
+  def self.count_sequences(game)
+    output = []
+    aux = game.sort.first - 1 
+    temp = []
+    game.sort.each do |x|
+      if aux == x.pred
+        temp << x
+      else
+        output << temp
+        temp = []
+        temp << x
+      end
+      aux = x
+    end
+    output << temp
+    puts output.to_s
+    output_hash = {}
+    (2..15).to_a.each do |x|
+      count = output.map{|z| z.size == x}.count(true)
+      output_hash[x] =  count unless count == 0
+    end
+    output_hash
   end
 
   def self.how_much_did_i_win?(game, last_months)
@@ -212,4 +287,46 @@ class Concurso < ApplicationRecord
     rest = Concurso.find_by(concurso: self.concurso - 1).balls & self.balls
     rest
   end
+
+  private
+
+#   def self.convert_html_to_csv
+#     require 'nokogiri'
+#     require 'pp'
+
+#     doc = Nokogiri::HTML(<<EOT)
+#         <table>
+#         <tr>
+#             <td>John Smith</td>
+#             <td>I live here 123</td>
+#             <td>phone ###</td>
+#             <td>Birthday</td>
+#             <td>Other Data</td>
+#         </tr>
+#         <tr>
+#             <td>John Smyth</td>
+#             <td>I live here 456</td>
+#             <td>phone ###</td>
+#             <td>Birthday</td>
+#             <td>Other Data</td>
+#         </tr>
+#         </table>
+#         EOT
+
+#     data = []
+#     doc.at('table').search('tr').each do |tr|
+#         data << tr.search('td').map(&:text)
+#     end
+
+#     pp data
+#   end
+
+  def self.merge_attributes(array_values)
+    if array_values.size == 31
+      attrs = ["concurso", "data_sorteio", "bola1", "bola2", "bola3", "bola4", "bola5", "bola6", "bola7", "bola8", "bola9", "bola10", "bola11", "bola12", "bola13", "bola14", "bola15", "arrecadacao_total", "ganhadores_15_numeros", "ganhadores_14_numeros", "ganhadores_13_numeros", "ganhadores_12_numeros", "ganhadores_11_numeros", "valor_rateio_15_numeros", "valor_rateio_14_numeros", "valor_rateio_13_numeros", "valor_rateio_12_numeros", "valor_rateio_11_numeros", "acumulado_15_numeros", "estimativa_premio", "valor_acumulado_especial"]
+      return Hash[attrs.zip(array_values.map {|i| i.include?(',') ? (i.split /, /) : i})]
+    end
+    false
+  end
+  
 end
