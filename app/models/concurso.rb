@@ -260,6 +260,14 @@ class Concurso < ApplicationRecord
     cash.sum
   end
 
+  def self.search_perfect_game
+    cash = -1
+    while cash < 0 
+      cash = how_much_did_i_win?(randon_game, 3)
+    end
+    cash
+  end
+
   def self.sum_per_concurso(last = 10)
     concursos = Concurso.last(last)
     result = {}
